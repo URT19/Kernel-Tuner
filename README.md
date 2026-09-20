@@ -200,7 +200,7 @@ Kernel-Tuner/
 
 این پروژه آزاد است. می‌توانید آزادانه استفاده، تغییر و توزیع کنید.
 
-[پروژه xanmod kernel](https://xanmod.org/)
+[پروژه xanmod kernel](https://xanmod.org/)  [Gitlab](https://gitlab.com/xanmod/linux)
 ---
 
 **ساخته‌شده با عشق برای جامعه لینوکس فارسی**  
