@@ -55,17 +55,25 @@
 کافیه این دستور رو در ترمینال بزنید:
 
 
+ترجیحا پیشنهاد میدم دستورات رو توی tmux اجرا کنید تا وسط تعویض کرنل اگه ارتباطتون با سرور قطع شد، اسکریپت نصاب کرنل کارش رو اتمام کنه
+
+```
+tmux new -s kernel-changer
+```
+#### XAN-MOD Python Instalelr
+
+```bash
+sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/kernel-tuner.py -o /tmp/kt.py && python3 /tmp/kt.py'
+```
+
+
+
 #### UNDER DEVELOPMENT
 ```bash
 sudo bash <(curl -sL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/install-kernel.sh)
 ```
 
 
-#### XAN-MOD Python Instalelr
-
-```bash
-sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/kernel-tuner.py -o /tmp/kt.py && python3 /tmp/kt.py'
-```
 
 
 ### روش ۲: دانلود و سپس اجرا
