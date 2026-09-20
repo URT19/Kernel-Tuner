@@ -1,5 +1,9 @@
 # Kernel Installer + Profile Manager
 
+
+## در حال تست می باشد.
+
+
 **ابزار نصب کرنل و تنظیم پروفایل شبکه (Finglish Edition)**
 
 یک اسکریپت ساده و قدرتمند برای نصب کرنل‌های بهینه‌شده و تنظیم پارامترهای `sysctl` شبکه روی Debian و Ubuntu.
@@ -50,9 +54,19 @@
 
 کافیه این دستور رو در ترمینال بزنید:
 
+
+#### UNDER DEVELOPMENT
 ```bash
 sudo bash <(curl -sL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/install-kernel.sh)
 ```
+
+
+#### XAN-MOD Python Instalelr
+
+```bash
+sudo python3 <(curl -sL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/kernel-tuner.py)
+```
+
 
 ### روش ۲: دانلود و سپس اجرا
 
@@ -72,7 +86,8 @@ sudo bash install-kernel.sh
 ```bash
 git clone https://github.com/URT19/Kernel-Tuner.git
 cd Kernel-Tuner
-sudo bash install-kernel.sh
+# sudo bash install-kernel.sh
+sudo python3 kernel-tuner.py
 ```
 
 > **نکته:** بعد از اجرای اسکریپت، منوها به صورت تعاملی نمایش داده می‌شوند. ابتدا کرنل و سپس پروفایل را انتخاب کنید.
