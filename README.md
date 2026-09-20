@@ -5,7 +5,8 @@
 در حال حاظر فقط نسخه پایتون اوکی هست 
 روی اوبونتو 22 و 24 تست گرفتم اوکی هست.
 <div align="center">
-<img width="586" height="453" alt="image" src="https://github.com/user-attachments/assets/7edea02f-6102-442d-95c5-1c6bd2976ee1" />
+<img width="841" height="608" alt="image" src="https://github.com/user-attachments/assets/ebe4bb36-395e-4a62-9126-e8f1bc3b04cd" />
+
 
 </div>
 
