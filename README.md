@@ -64,7 +64,7 @@ sudo bash <(curl -sL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/h
 #### XAN-MOD Python Instalelr
 
 ```bash
-sudo python3 <(curl -sL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/kernel-tuner.py)
+sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/URT19/Kernel-Tuner/refs/heads/main/kernel-tuner.py -o /tmp/kt.py && python3 /tmp/kt.py'
 ```
 
 
