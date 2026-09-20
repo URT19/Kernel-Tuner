@@ -4,10 +4,10 @@
 ## در حال تست می باشد.
 در حال حاظر فقط نسخه پایتون اوکی هست 
 روی اوبونتو 22 و 24 تست گرفتم اوکی هست.
-
+<div align="center">
 <img width="586" height="453" alt="image" src="https://github.com/user-attachments/assets/7edea02f-6102-442d-95c5-1c6bd2976ee1" />
 
-
+</div>
 
 
 **ابزار نصب کرنل و تنظیم پروفایل شبکه (Finglish Edition)**
