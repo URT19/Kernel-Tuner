@@ -84,6 +84,9 @@ BACKUP_DIR   = SYSCTL_DIR / f"backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 LOG_FILE     = Path("/var/log/kernel-tuner.log")
 KEYRING_PATH = Path("/etc/apt/keyrings/xanmod-archive-keyring.gpg")
 XANMOD_REPO  = Path("/etc/apt/sources.list.d/xanmod-release.list")
+XANMOD_KEY_ID = "86F7D09EE734E623"  # signing key ID apt reports for deb.xanmod.org
+XANMOD_KEY_TMP = Path("/tmp/xanmod-archive.key")
+RESOLVED_CONF = Path("/etc/systemd/resolved.conf")
 
 # XanMod codename haye rasmi (az site xanmod.org)
 XANMOD_SUPPORTED = {
@@ -244,17 +247,29 @@ def resolve_xanmod_codename(distro_id, codename):
 def setup_xanmod_repo(codename):
     KEYRING_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # GPG key
+    # GPG key. A 0-byte keyring from an earlier failed run must not be trusted.
+    if KEYRING_PATH.exists() and KEYRING_PATH.stat().st_size == 0:
+        KEYRING_PATH.unlink()
     if not KEYRING_PATH.exists():
         step("Downloading XanMod GPG key...")
-        rc, _, errmsg = run(
-            f"wget -qO - https://dl.xanmod.org/archive.key | "
-            f"gpg --dearmor -vo {KEYRING_PATH}",
-            capture=True,
-        )
-        if rc != 0 or not KEYRING_PATH.exists():
-            err(f"GPG key install failed: {errmsg}")
+        # dl.xanmod.org sits behind a Cloudflare challenge that blocks scripts,
+        # so fall back to the keyserver using the key ID apt reports.
+        run(f"wget -qO {XANMOD_KEY_TMP} https://dl.xanmod.org/archive.key")
+        rc = 1
+        if XANMOD_KEY_TMP.exists() and XANMOD_KEY_TMP.stat().st_size > 0:
+            rc, _, _ = run(f"gpg --dearmor -o {KEYRING_PATH} {XANMOD_KEY_TMP}", capture=True)
+        if rc != 0:
+            warn("dl.xanmod.org did not return a key, trying keyserver by ID...")
+            run(f"gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys {XANMOD_KEY_ID}", capture=True)
+            run(f"gpg --export {XANMOD_KEY_ID} > {KEYRING_PATH}", capture=True)
+        # Accept only a keyring that really holds the key apt uses.
+        _, out, _ = run(f"gpg --show-keys --with-colons {KEYRING_PATH}", capture=True)
+        if XANMOD_KEY_ID not in out:
+            KEYRING_PATH.unlink(missing_ok=True)
+            err("GPG key install failed (no key with ID " + XANMOD_KEY_ID + ").")
             return False
+        log(f"GPG key installed (ID {XANMOD_KEY_ID}). Check the fingerprint with: "
+            f"gpg --show-keys {KEYRING_PATH}")
     else:
         info(f"GPG key already exists: {KEYRING_PATH}")
 
@@ -333,20 +348,8 @@ def install_xanmod(branch="lts"):
     info(f"Package: {pkg}")
 
     if not apt_install(pkg):
-        warn(f"Nasb {pkg} failed khord. Fallback...")
-        for alt in (
-            "linux-xanmod-lts-x64v2",
-            "linux-xanmod-lts-x64v3",
-            "linux-xanmod-x64v3",
-            "linux-xanmod",
-        ):
-            info(f"Emtehan: {alt}")
-            if apt_install(alt):
-                pkg = alt
-                break
-        else:
-            err("No XanMod package installed.")
-            return False
+        err(f"Install {pkg} failed.")
+        return False
 
     log(f"XanMod installed: {pkg}")
     return True
@@ -730,7 +733,7 @@ def show_status():
     print()
 
     running   = get_running_kernel()
-    boot_next = get_default_boot_kernel()
+    boot_next = get_boot_kernel()
     installed = get_installed_kernels()
 
     print(f"  {C.W}{'Running kernel:':<22}{C.N} {C.G}{running}{C.N}")
@@ -833,6 +836,20 @@ def show_profile_help():
 # ============================================================
 #  MENU: KERNEL
 # ============================================================
+def set_dns_cloudflare():
+    step("Setting DNS to Cloudflare (systemd-resolved)")
+    if RESOLVED_CONF.exists():
+        shutil.copy2(RESOLVED_CONF, RESOLVED_CONF.with_name(RESOLVED_CONF.name + ".bak"))
+        info(f"Backup: {RESOLVED_CONF}.bak")
+    RESOLVED_CONF.write_text("[Resolve]\nDNS=1.1.1.1 1.0.0.1\n")
+    rc, _, errmsg = run("systemctl restart systemd-resolved", capture=True)
+    if rc != 0:
+        err(f"systemd-resolved restart failed: {errmsg[:200]}")
+        return False
+    log("DNS set to 1.1.1.1 / 1.0.0.1")
+    return True
+
+
 def menu_kernel(distro_pretty, karch):
     while True:
         os.system("clear")
@@ -846,7 +863,7 @@ def menu_kernel(distro_pretty, karch):
         hr()
         print()
         opts = [
-            ("1", "XanMod (LTS)",    "Recommended — stable + BBRv3"),
+            ("1", "XanMod (x64v3)",  "MAIN: linux-xanmod-x64v3 (needs v3 CPU)"),
             ("2", "XanMod (MAIN)",   "Newest mainline XanMod"),
             ("3", "XanMod (EDGE)",   "Close to mainline + tweaks"),
             ("4", "XanMod (RT)",     "Real-time for special workloads"),
@@ -860,13 +877,14 @@ def menu_kernel(distro_pretty, karch):
             print(f"   {C.G}{C.BD}{k}){C.N}  {name:<20} {C.DM}{desc}{C.N}")
         hr()
         print(f"   {C.R}{C.BD}C){C.N}  {C.DM}Clean XanMod repo{C.N}")
+        print(f"   {C.Y}{C.BD}D){C.N}  {C.DM}Set DNS to Cloudflare (1.1.1.1){C.N}")
         print(f"   {C.R}{C.BD}0){C.N}  {C.DM}Exit{C.N}")
         print()
         hr()
-        choice = input(f"{C.CY}  Select [0-9/C]: {C.N}").strip().upper()
+        choice = input(f"{C.CY}  Select [0-9/C/D]: {C.N}").strip().upper()
 
         if choice == "1":
-            install_xanmod("lts"); return
+            install_xanmod("main"); return
         elif choice == "2":
             install_xanmod("main"); return
         elif choice == "3":
@@ -887,6 +905,10 @@ def menu_kernel(distro_pretty, karch):
             clean_xanmod()
             pause()
             continue
+        elif choice == "D":
+            set_dns_cloudflare()
+            pause()
+            continue
         elif choice == "0":
             sys.exit(0)
         else:
@@ -898,6 +920,92 @@ def menu_kernel(distro_pretty, karch):
 # ============================================================
 #  MENU: PROFILE
 # ============================================================
+# ============================================================
+#  VPN-SERVER PROFILE + SWAP
+# ============================================================
+
+# __CONNTRACK_MAX__ is filled in from the user count (min 262144).
+VPN_PROFILE_BODY = """
+# Forwarding (VPN and relays need it)
+net.ipv4.ip_forward = 1
+
+# Congestion
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# Buffers capped at 16MB to limit RAM use with many sockets
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+
+# Connections
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 4096
+net.core.netdev_max_backlog = 5000
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 20
+
+# Keepalive so frp / backhaul / wattunnel relays survive NAT idle timeouts
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 5
+
+# Conntrack (needs the nf_conntrack module loaded first)
+net.netfilter.nf_conntrack_max = __CONNTRACK_MAX__
+net.netfilter.nf_conntrack_tcp_timeout_established = 7200
+net.netfilter.nf_conntrack_udp_timeout = 30
+net.netfilter.nf_conntrack_udp_timeout_stream = 120
+
+# Memory
+vm.swappiness = 10
+fs.file-max = 1048576
+"""
+
+
+def apply_vpn_profile():
+    step("Profile: VPN-SERVER")
+    raw = input(f"  Concurrent users [{C.DM}150{C.N}]: ").strip()
+    users = int(raw) if raw.isdigit() and int(raw) > 0 else 150
+
+    # The conntrack keys only exist once the module is loaded; keep it across reboots.
+    run("modprobe nf_conntrack", capture=True)
+    Path("/etc/modules-load.d/nf_conntrack.conf").write_text("nf_conntrack\n")
+
+    conntrack_max = max(262144, users * 1024)
+    write_profile("VPN-SERVER", VPN_PROFILE_BODY.replace("__CONNTRACK_MAX__", str(conntrack_max)))
+
+    # systemd default open-file limit is 1024; VPN and relay services need far more.
+    Path("/etc/systemd/system.conf.d").mkdir(parents=True, exist_ok=True)
+    Path("/etc/systemd/system.conf.d/99-nofile.conf").write_text(
+        "[Manager]\nDefaultLimitNOFILE=1048576\n"
+    )
+    run("systemctl daemon-reexec", capture=True)
+    log(f"Users={users}, nf_conntrack_max={conntrack_max}, NOFILE=1048576")
+
+
+def create_swap():
+    step("Creating 2G swapfile")
+    if Path("/swapfile").exists():
+        info("/swapfile already exists, skipping.")
+        return True
+    for cmd in ("fallocate -l 2G /swapfile", "chmod 600 /swapfile",
+                "mkswap /swapfile", "swapon /swapfile"):
+        rc, _, errmsg = run(cmd, capture=True)
+        if rc != 0:
+            err(f"'{cmd}' failed: {errmsg[:200]}")
+            return False
+    fstab = Path("/etc/fstab")
+    if "/swapfile" not in fstab.read_text():
+        with fstab.open("a") as f:
+            f.write("/swapfile none swap sw 0 0\n")
+    log("2G swap enabled, persistent in /etc/fstab.")
+    return True
+
+
 def menu_profile():
     while True:
         os.system("clear")
@@ -919,10 +1027,12 @@ def menu_profile():
         print(f"   {C.Y}{C.BD}7){C.N}  {C.DM}Guide (profiles explained){C.N}")
         print(f"   {C.Y}{C.BD}8){C.N}  {C.DM}Status current{C.N}")
         print(f"   {C.Y}{C.BD}9){C.N}  {C.DM}Restore backup akhar{C.N}")
+        print(f"   {C.G}{C.BD}V){C.N}  {C.DM}VPN-SERVER profile (default 150 users){C.N}")
+        print(f"   {C.G}{C.BD}S){C.N}  {C.DM}Create 2G swapfile{C.N}")
         print(f"   {C.R}{C.BD}0){C.N}  {C.DM}Exit{C.N}")
         print()
         hr()
-        choice = input(f"{C.CY}  Select [0-9]: {C.N}").strip()
+        choice = input(f"{C.CY}  Select [0-9/V/S]: {C.N}").strip().upper()
 
         if choice == "1":
             apply_profile("STREAMING"); return
@@ -944,6 +1054,12 @@ def menu_profile():
             continue
         elif choice == "9":
             restore_backup(); return
+        elif choice == "V":
+            apply_vpn_profile(); return
+        elif choice == "S":
+            create_swap()
+            pause()
+            continue
         elif choice == "0":
             sys.exit(0)
         else:
