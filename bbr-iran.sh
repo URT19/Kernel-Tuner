@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#### how to run --------------------------------------------------------------
+### wget https://github.com/URT19/Kernel-Tuner/raw/refs/heads/main/bbr-iran.sh
+## chmod +x bbr-iran.sh
+# sudo bash bbr-iran.sh
+
+
 # BBR Optimization for Iranian Internet
 # High latency + packet loss friendly
 
