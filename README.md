@@ -66,6 +66,153 @@ sudo apt autoremove --purge
 sudo update-grub
 ```
 ---------
+### بهینه سازی پینگ و سرعت
+
+```
+nano t1
+```
+
+
+```
+#!/bin/bash
+
+# ============================================
+# Low Latency / Low Ping Optimization Script
+# ============================================
+
+set -e
+
+BACKUP_DIR="/root/lowping-backup-$(date +%Y%m%d-%H%M%S)"
+SYSCTL_FILE="/etc/sysctl.d/99-low-ping.conf"
+GOVERNOR_SERVICE="/etc/systemd/system/cpu-performance.service"
+
+echo "=== Low Ping Optimization Script ==="
+echo ""
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root."
+   exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+echo "[+] Backup directory: $BACKUP_DIR"
+
+# Backup
+sysctl -a > "$BACKUP_DIR/sysctl-before.conf" 2>/dev/null || true
+cp /etc/sysctl.conf "$BACKUP_DIR/" 2>/dev/null || true
+cp -r /etc/sysctl.d/ "$BACKUP_DIR/sysctl.d/" 2>/dev/null || true
+
+# 1. Enable BBR + fq
+echo "[1/4] Enabling BBR and fq..."
+
+modprobe tcp_bbr 2>/dev/null || true
+echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
+
+cat > "$SYSCTL_FILE" << 'EOF'
+# Low Latency / Low Ping Optimizations
+
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_no_metrics_save = 1
+net.ipv4.tcp_moderate_rcvbuf = 1
+
+net.core.netdev_max_backlog = 5000
+net.core.somaxconn = 1024
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_keepalive_intvl = 15
+
+vm.swappiness = 10
+vm.dirty_ratio = 10
+vm.dirty_background_ratio = 5
+EOF
+
+sysctl --system > /dev/null 2>&1
+echo "   Done"
+
+# 2. CPU Governor
+echo "[2/4] Setting CPU governor to performance..."
+
+if command -v cpupower >/dev/null 2>&1; then
+    cpupower frequency-set -g performance >/dev/null 2>&1 || true
+else
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo performance > "$gov" 2>/dev/null || true
+    done
+fi
+
+cat > "$GOVERNOR_SERVICE" << 'EOF'
+[Unit]
+Description=Set CPU Governor to Performance
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if command -v cpupower >/dev/null; then cpupower frequency-set -g performance; else for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $g; done; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now cpu-performance.service >/dev/null 2>&1 || true
+echo "   Done"
+
+# 3. Transparent Huge Pages
+echo "[3/4] Configuring Transparent Huge Pages..."
+echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+echo "   Done"
+
+# 4. Status
+echo ""
+echo "[4/4] Current status:"
+echo "----------------------------------------"
+echo -n "Congestion Control : "
+sysctl -n net.ipv4.tcp_congestion_control
+echo -n "Default Qdisc      : "
+sysctl -n net.core.default_qdisc
+echo -n "CPU Governor       : "
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "N/A (common on VPS)"
+echo "----------------------------------------"
+echo ""
+echo "Optimization completed successfully."
+echo "Backup saved in: $BACKUP_DIR"
+echo "It is recommended to reboot the system."
+```
+
+
+
+```
+chmod +x t1
+sudo bash t1
+```
+
+
+
+بعد از ریبوت دوباره وضعیت را چک کن:
+
+```
+sysctl net.ipv4.tcp_congestion_control
+sysctl net.core.default_qdisc
+```
+
+
+----------
 
 ## در حال تست می باشد.
 در حال حاظر فقط نسخه پایتون اوکی هست 
