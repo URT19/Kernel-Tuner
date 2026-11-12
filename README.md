@@ -1,6 +1,48 @@
 # Kernel Installer + Profile Manager
 
+### آپدیت به آخرین نسخه بصورت دستی
 
+
+
+```
+apt update
+```
+
+
+##### نصب کرنل HWE
+
+```
+apt install --install-recommends linux-generic-hwe-24.04 -y
+```
+
+
+##### به‌روزرسانی GRUB و ساخت Initramfs
+
+```
+update-initramfs -u -k all
+update-grub
+```
+
+##### بررسی نهایی قبل از راه‌اندازی مجدد
+
+```
+echo "===== CURRENT KERNEL ====="
+uname -r
+
+echo "===== INSTALLED KERNELS ====="
+ls /lib/modules/
+
+echo "===== BOOT IMAGES ====="
+ls /boot/vmlinuz-*
+
+echo "===== PACKAGE HEALTH ====="
+dpkg --audit
+
+echo "===== APT HEALTH ====="
+apt-get check
+```
+
+----------------
 ## در حال تست می باشد.
 در حال حاظر فقط نسخه پایتون اوکی هست 
 روی اوبونتو 22 و 24 تست گرفتم اوکی هست.
